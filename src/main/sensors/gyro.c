@@ -139,7 +139,10 @@ bool isGyroSensorCalibrationComplete(const gyroSensor_t *gyroSensor)
 }
 
 bool gyro_calibration_stored_in_mem(){
-    return true
+    gyroSensor_t temp;
+    memset(&temp, 0, sizeof(gyroSensor_t));
+    read_gyro_from_memory(&temp);
+    return *(bool*)(&temp);
 }
 
 bool gyroIsCalibrationComplete(void)
@@ -410,15 +413,15 @@ static FAST_CODE void gyroUpdateSensor(gyroSensor_t *gyroSensor)
         }
     } else {
         if(gyro_calibration_stored_in_mem()){
-            *gyroSensor = read_gyro_from_memory();
+            *gyroSensor = read_gyro_from_memory(gyroSensor);
         } else {
             performGyroCalibration(gyroSensor, gyroConfig()->gyroMovementCalibrationThreshold);
-            write_gyro_to_memory();
+            write_gyro_to_memory(gyroSensor);
         }
     }
 }
 
-gyroSensor_t read_gyro_from_memory(gyroSensor_t* gyroSensor){
+void read_gyro_from_memory(gyroSensor_t* gyroSensor){
     flashfsReadAbs(0, gyroSensor, sizeof(gyroSensor_t));
 }
 
