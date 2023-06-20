@@ -135,7 +135,11 @@ void pgResetFn_gyroConfig(gyroConfig_t *gyroConfig)
 
 bool isGyroSensorCalibrationComplete(const gyroSensor_t *gyroSensor)
 {
-    return gyroSensor->calibration.cyclesRemaining == 0;
+    return gyroSensor->calibration.cyclesRemaining == 0 || gyro_calibration_stored_in_mem();
+}
+
+bool gyro_calibration_stored_in_mem(){
+    return true
 }
 
 bool gyroIsCalibrationComplete(void)
@@ -405,8 +409,21 @@ static FAST_CODE void gyroUpdateSensor(gyroSensor_t *gyroSensor)
             alignSensorViaRotation(gyroSensor->gyroDev.gyroADC, gyroSensor->gyroDev.gyroAlign);
         }
     } else {
-        performGyroCalibration(gyroSensor, gyroConfig()->gyroMovementCalibrationThreshold);
+        if(gyro_calibration_stored_in_mem()){
+            *gyroSensor = read_gyro_from_memory();
+        } else {
+            performGyroCalibration(gyroSensor, gyroConfig()->gyroMovementCalibrationThreshold);
+            write_gyro_to_memory();
+        }
     }
+}
+
+gyroSensor_t read_gyro_from_memory(gyroSensor_t* gyroSensor){
+    flashfsReadAbs(0, gyroSensor, sizeof(gyroSensor_t));
+}
+
+void write_gyro_to_memory(gyroSensor_t* gyroSensor){
+    flashfsWrite(gyroSensor, sizeof(gyroSensor_t), true);
 }
 
 FAST_CODE void gyroUpdate(void)
