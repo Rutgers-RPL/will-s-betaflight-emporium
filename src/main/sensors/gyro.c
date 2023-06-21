@@ -212,6 +212,7 @@ bool isFirstArmingGyroCalibrationRunning(void)
 
 STATIC_UNIT_TESTED NOINLINE void performGyroCalibration(gyroSensor_t *gyroSensor, uint8_t gyroMovementCalibrationThreshold)
 {
+    //https://www.google.com/search?client=firefox-b-1-d&q=bugs
     bool calFailed = false;
 
     for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
@@ -412,8 +413,14 @@ static FAST_CODE void gyroUpdateSensor(gyroSensor_t *gyroSensor)
             alignSensorViaRotation(gyroSensor->gyroDev.gyroADC, gyroSensor->gyroDev.gyroAlign);
         }
     } else {
-        if(gyro_calibration_stored_in_mem()){
-            *gyroSensor = read_gyro_from_memory(gyroSensor);
+        float highest_stddev = 0;
+        for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+            float x = devStandardDeviation(&gyroSensor->calibration.var[axis]);
+            highest_stddev = max(highest_stddev, abs(x));
+        }
+
+        if(highest_stddev > gyroConfig()->gyroMovementCalibrationThreshold){
+            read_gyro_from_memory(gyroSensor);
         } else {
             performGyroCalibration(gyroSensor, gyroConfig()->gyroMovementCalibrationThreshold);
             write_gyro_to_memory(gyroSensor);
