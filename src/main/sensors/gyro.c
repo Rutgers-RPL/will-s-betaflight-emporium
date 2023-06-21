@@ -421,8 +421,31 @@ static FAST_CODE void gyroUpdateSensor(gyroSensor_t *gyroSensor)
     }
 }
 
-void read_gyro_from_memory(gyroSensor_t* gyroSensor){
-    flashfsReadAbs(0, gyroSensor, sizeof(gyroSensor_t));
+gyroSensor_t* read_gyro_from_memory(gyroSensor_t* gyroSensor){
+    uint32_t address = 0;
+    flashfsSeekAbs(address);
+
+    char expectedBuffer = "KeithLLNerd";
+
+    const int bufferSize = sizeof("KeithLLNerd");
+    char buffer[bufferSize + 1];
+
+    const uint32_t testLimit = flashfsGetSize();
+
+    flashfsSeekAbs(0);
+    
+    for (address = 0; address < testLimit; address += bufferSize) {
+        
+        memset(buffer, 0, sizeof(buffer));
+        int bytesRead = flashfsReadAbs(address, (uint8_t *)buffer, bufferSize);
+
+        int result = strncmp(buffer, expectedBuffer, bufferSize);
+        if (result == 1 && bytesRead == bufferSize) {
+            flashfsReadAbs(address, gyroSensor, sizeof(gyroSensor_t));
+        }
+    }
+
+    return gyroSensor; 
 }
 
 void write_gyro_to_memory(gyroSensor_t* gyroSensor){
