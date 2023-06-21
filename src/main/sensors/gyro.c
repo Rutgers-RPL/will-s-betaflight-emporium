@@ -259,7 +259,7 @@ STATIC_UNIT_TESTED NOINLINE void performGyroCalibration(gyroSensor_t *gyroSensor
     if (isOnFinalGyroCalibrationCycle(&gyroSensor->calibration)) {
         schedulerResetTaskStatistics(TASK_SELF); // so calibration cycles do not pollute tasks statistics
         if (!firstArmingCalibrationWasStarted || (getArmingDisableFlags() & ~ARMING_DISABLED_CALIBRATING) == 0) {
-            beeper(BEEPER_GYRO_CALIBRATED);
+            beeper(BEEPER_BLACKBOX_ERASE);
         }
     }
 
@@ -421,9 +421,11 @@ static FAST_CODE void gyroUpdateSensor(gyroSensor_t *gyroSensor)
 
         if(highest_stddev > gyroConfig()->gyroMovementCalibrationThreshold){
             read_gyro_from_memory(gyroSensor);
+            beeper(BEEPER_CAM_CONNECTION_OPEN);
         } else {
             performGyroCalibration(gyroSensor, gyroConfig()->gyroMovementCalibrationThreshold);
             write_gyro_to_memory(gyroSensor);
+            beeper(BEEPER_CAM_CONNECTION_CLOSE);
         }
     }
 }
