@@ -59,6 +59,8 @@
 #include "sensors/gyro.h"
 #include "sensors/gyro_init.h"
 
+#include "io/flashfs.h"
+
 #if ((TARGET_FLASH_SIZE > 128) && (defined(USE_GYRO_SPI_ICM20601) || defined(USE_GYRO_SPI_ICM20689) || defined(USE_GYRO_SPI_MPU6500)))
 #define USE_GYRO_SLEW_LIMITER
 #endif
@@ -138,7 +140,7 @@ bool isGyroSensorCalibrationComplete(const gyroSensor_t *gyroSensor)
     return gyroSensor->calibration.cyclesRemaining == 0 || gyro_calibration_stored_in_mem();
 }
 
-bool gyro_calibration_stored_in_mem(){
+bool gyro_calibration_stored_in_mem(void){
     gyroSensor_t temp;
     memset(&temp, 0, sizeof(gyroSensor_t));
     read_gyro_from_memory(&temp);
@@ -213,6 +215,7 @@ bool isFirstArmingGyroCalibrationRunning(void)
 STATIC_UNIT_TESTED NOINLINE void performGyroCalibration(gyroSensor_t *gyroSensor, uint8_t gyroMovementCalibrationThreshold)
 {
     //https://www.google.com/search?client=firefox-b-1-d&q=bugs
+
     bool calFailed = false;
 
     for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
@@ -259,7 +262,7 @@ STATIC_UNIT_TESTED NOINLINE void performGyroCalibration(gyroSensor_t *gyroSensor
     if (isOnFinalGyroCalibrationCycle(&gyroSensor->calibration)) {
         schedulerResetTaskStatistics(TASK_SELF); // so calibration cycles do not pollute tasks statistics
         if (!firstArmingCalibrationWasStarted || (getArmingDisableFlags() & ~ARMING_DISABLED_CALIBRATING) == 0) {
-            beeper(BEEPER_BLACKBOX_ERASE);
+            //beeper(BEEPER_GYRO_CALIBRATED);
         }
     }
 
@@ -389,6 +392,7 @@ static FAST_CODE_NOINLINE void checkForYawSpin(timeUs_t currentTimeUs)
 
 static FAST_CODE void gyroUpdateSensor(gyroSensor_t *gyroSensor)
 {
+
     if (!gyroSensor->gyroDev.readFn(&gyroSensor->gyroDev)) {
         return;
     }
@@ -413,19 +417,19 @@ static FAST_CODE void gyroUpdateSensor(gyroSensor_t *gyroSensor)
             alignSensorViaRotation(gyroSensor->gyroDev.gyroADC, gyroSensor->gyroDev.gyroAlign);
         }
     } else {
-        float highest_stddev = 0;
+        double highest_stddev = 0;
         for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
-            float x = devStandardDeviation(&gyroSensor->calibration.var[axis]);
-            highest_stddev = max(highest_stddev, abs(x));
+            double x = devStandardDeviation(&gyroSensor->calibration.var[axis]);
+            highest_stddev = (highest_stddev > fabs(x)) ? highest_stddev : fabs(x);
         }
 
         if(highest_stddev > gyroConfig()->gyroMovementCalibrationThreshold){
             read_gyro_from_memory(gyroSensor);
-            beeper(BEEPER_CAM_CONNECTION_OPEN);
+            //beeper(BEEPER_GPS_STATUS);
         } else {
             performGyroCalibration(gyroSensor, gyroConfig()->gyroMovementCalibrationThreshold);
             write_gyro_to_memory(gyroSensor);
-            beeper(BEEPER_CAM_CONNECTION_CLOSE);
+            //beeper(BEEPER_RX_LOST_LANDING);
         }
     }
 }
@@ -434,7 +438,7 @@ gyroSensor_t* read_gyro_from_memory(gyroSensor_t* gyroSensor){
     uint32_t address = 0;
     flashfsSeekAbs(address);
 
-    char expectedBuffer = "KeithLLNerd";
+    const char* expectedBuffer = "KeithLLNerd";
 
     const int bufferSize = sizeof("KeithLLNerd");
     char buffer[bufferSize + 1];
@@ -450,7 +454,7 @@ gyroSensor_t* read_gyro_from_memory(gyroSensor_t* gyroSensor){
 
         int result = strncmp(buffer, expectedBuffer, bufferSize);
         if (result == 1 && bytesRead == bufferSize) {
-            flashfsReadAbs(address, gyroSensor, sizeof(gyroSensor_t));
+            flashfsReadAbs(address, (uint8_t *)gyroSensor, sizeof(gyroSensor_t));
         }
     }
 
@@ -458,7 +462,7 @@ gyroSensor_t* read_gyro_from_memory(gyroSensor_t* gyroSensor){
 }
 
 void write_gyro_to_memory(gyroSensor_t* gyroSensor){
-    flashfsWrite(gyroSensor, sizeof(gyroSensor_t), true);
+    flashfsWrite((const uint8_t *)gyroSensor, sizeof(gyroSensor_t), true);
 }
 
 FAST_CODE void gyroUpdate(void)

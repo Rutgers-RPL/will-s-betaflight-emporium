@@ -1,0 +1,6 @@
+tap "homebrew/bundle"
+tap "homebrew/cask"
+tap "homebrew/core"
+brew "gdb"
+cask "iglance"
+cask "wine-stable"

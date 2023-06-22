@@ -213,6 +213,11 @@ int16_t gyroGetTemperature(void);
 bool gyroOverflowDetected(void);
 bool gyroYawSpinDetected(void);
 uint16_t gyroAbsRateDps(int axis);
+
+bool gyro_calibration_stored_in_mem(void);
+gyroSensor_t* read_gyro_from_memory(gyroSensor_t* gyroSensor);
+void write_gyro_to_memory(gyroSensor_t* gyroSensor);
+
 #ifdef USE_DYN_LPF
 float dynThrottle(float throttle);
 void dynLpfGyroUpdate(float throttle);
