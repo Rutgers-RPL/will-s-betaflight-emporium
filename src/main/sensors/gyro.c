@@ -135,7 +135,14 @@ void pgResetFn_gyroConfig(gyroConfig_t *gyroConfig)
 
 bool isGyroSensorCalibrationComplete(const gyroSensor_t *gyroSensor)
 {
-    return gyroSensor->calibration.cyclesRemaining == 0;
+    return gyroSensor->calibration.cyclesRemaining == 0 || gyro_calibration_stored_in_mem();
+}
+
+bool gyro_calibration_stored_in_mem(){
+    gyroSensor_t temp;
+    memset(&temp, 0, sizeof(gyroSensor_t));
+    read_gyro_from_memory(&temp);
+    return *(bool*)(&temp);
 }
 
 bool gyroIsCalibrationComplete(void)
@@ -205,6 +212,7 @@ bool isFirstArmingGyroCalibrationRunning(void)
 
 STATIC_UNIT_TESTED NOINLINE void performGyroCalibration(gyroSensor_t *gyroSensor, uint8_t gyroMovementCalibrationThreshold)
 {
+    //https://www.google.com/search?client=firefox-b-1-d&q=bugs
     bool calFailed = false;
 
     for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
@@ -251,7 +259,7 @@ STATIC_UNIT_TESTED NOINLINE void performGyroCalibration(gyroSensor_t *gyroSensor
     if (isOnFinalGyroCalibrationCycle(&gyroSensor->calibration)) {
         schedulerResetTaskStatistics(TASK_SELF); // so calibration cycles do not pollute tasks statistics
         if (!firstArmingCalibrationWasStarted || (getArmingDisableFlags() & ~ARMING_DISABLED_CALIBRATING) == 0) {
-            beeper(BEEPER_GYRO_CALIBRATED);
+            beeper(BEEPER_BLACKBOX_ERASE);
         }
     }
 
@@ -405,8 +413,52 @@ static FAST_CODE void gyroUpdateSensor(gyroSensor_t *gyroSensor)
             alignSensorViaRotation(gyroSensor->gyroDev.gyroADC, gyroSensor->gyroDev.gyroAlign);
         }
     } else {
-        performGyroCalibration(gyroSensor, gyroConfig()->gyroMovementCalibrationThreshold);
+        float highest_stddev = 0;
+        for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+            float x = devStandardDeviation(&gyroSensor->calibration.var[axis]);
+            highest_stddev = max(highest_stddev, abs(x));
+        }
+
+        if(highest_stddev > gyroConfig()->gyroMovementCalibrationThreshold){
+            read_gyro_from_memory(gyroSensor);
+            beeper(BEEPER_CAM_CONNECTION_OPEN);
+        } else {
+            performGyroCalibration(gyroSensor, gyroConfig()->gyroMovementCalibrationThreshold);
+            write_gyro_to_memory(gyroSensor);
+            beeper(BEEPER_CAM_CONNECTION_CLOSE);
+        }
     }
+}
+
+gyroSensor_t* read_gyro_from_memory(gyroSensor_t* gyroSensor){
+    uint32_t address = 0;
+    flashfsSeekAbs(address);
+
+    char expectedBuffer = "KeithLLNerd";
+
+    const int bufferSize = sizeof("KeithLLNerd");
+    char buffer[bufferSize + 1];
+
+    const uint32_t testLimit = flashfsGetSize();
+
+    flashfsSeekAbs(0);
+    
+    for (address = 0; address < testLimit; address += bufferSize) {
+        
+        memset(buffer, 0, sizeof(buffer));
+        int bytesRead = flashfsReadAbs(address, (uint8_t *)buffer, bufferSize);
+
+        int result = strncmp(buffer, expectedBuffer, bufferSize);
+        if (result == 1 && bytesRead == bufferSize) {
+            flashfsReadAbs(address, gyroSensor, sizeof(gyroSensor_t));
+        }
+    }
+
+    return gyroSensor; 
+}
+
+void write_gyro_to_memory(gyroSensor_t* gyroSensor){
+    flashfsWrite(gyroSensor, sizeof(gyroSensor_t), true);
 }
 
 FAST_CODE void gyroUpdate(void)
